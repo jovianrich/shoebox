@@ -1,0 +1,1045 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Shoebox</title>
+<meta name="description" content="Scan printed family photos with your iPhone: straighten, remove glare, label, and save to Photos.">
+<meta name="theme-color" content="#F3F5FA">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Shoebox">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800;900&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Layout: one-screen phone app (Keepsake look) — a scrolling home view with a floating save pill; scanning, editing, saving and settings open as full-screen sheets. Committed light look; the camera sheet is deliberately dark. */
+:root{
+  --bg:#F3F5FA; --card:#FFFFFF; --ink:#141A2E; --sub:#5A6380; --line:#D5DAE8; --tile:#DDE2EE;
+  --accent:#2B50D8; --accent-ink:#1E3BAA; --accent-soft:#E4EAFC; --green:#1A8F5E; --camgreen:#4ADE9B;
+  --night:#10142A; --warm:#F2B8A0; --sage:#9FC7B2; --danger:#C2352B; --amber:#B86E00;
+  --font:"Nunito", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, sans-serif;
+  --mono:ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme:light;
+}
+html,body{height:100%}
+body{margin:0;-webkit-text-size-adjust:100%}
+img{max-width:100%}
+body{background:var(--bg);color:var(--ink);font:600 16px/1.4 var(--font)}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+button,input,select,textarea{font:inherit;color:inherit}
+button,label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.app{max-width:460px;margin:0 auto;min-height:100%;position:relative}
+main{padding-top:calc(14px + env(safe-area-inset-top,0px));padding-bottom:120px;padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+
+/* header */
+.top{display:flex;align-items:center;gap:10px}
+.top .who{flex:1;min-width:0;display:flex;flex-direction:column}
+.greet{font-size:15px;font-weight:700;color:var(--sub)}
+h1{margin:0;font-size:34px;font-weight:900;letter-spacing:-.02em;line-height:1.05}
+.round{width:44px;height:44px;border-radius:22px;border:0;background:var(--card);box-shadow:0 2px 8px rgba(20,26,46,.08);display:grid;place-items:center;flex:0 0 auto;padding:0}
+.round svg{stroke:var(--ink)}
+
+/* buttons */
+.btn{appearance:none;border:0;border-radius:999px;min-height:48px;padding:0 20px;font-weight:900;font-size:16px;display:inline-flex;align-items:center;justify-content:center;gap:8px;position:relative;overflow:hidden;text-align:center;line-height:1.1}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.dark{background:var(--ink);color:#fff}
+.btn.white{background:#fff;color:var(--accent)}
+.btn.soft{background:var(--card);color:var(--ink);box-shadow:0 2px 8px rgba(20,26,46,.08);min-height:44px;font-size:15px;font-weight:800;padding:0 16px}
+.btn.ghost{background:transparent;color:#fff;box-shadow:inset 0 0 0 2px rgba(255,255,255,.6)}
+.btn.small{min-height:38px;font-size:14px;padding:0 14px}
+.btn.danger{color:var(--danger)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:0}
+.btn:active:not(:disabled){transform:scale(.98)}
+
+/* hero */
+.hero{position:relative;border-radius:26px;background:var(--accent);color:#fff;padding:20px;overflow:hidden;display:flex;flex-direction:column;gap:14px}
+.hero .album{font-size:14px;font-weight:800;opacity:.88;max-width:58%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero .big{font-size:26px;font-weight:900;line-height:1.1;max-width:60%;text-wrap:balance}
+.hero .prog{height:8px;border-radius:4px;background:rgba(255,255,255,.3);max-width:200px}
+.hero .prog span{display:block;height:8px;border-radius:4px;background:#fff;transition:width .4s}
+.hero .acts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stack{position:absolute;right:6px;top:14px;width:150px;height:120px;pointer-events:none}
+.mini{position:absolute;width:92px;height:108px;background:#fff;border-radius:6px;padding:6px;box-shadow:0 6px 14px rgba(0,0,0,.18)}
+.mini div{height:72px;border-radius:3px;background-size:cover;background-position:center}
+.mini.a{left:0;top:12px;transform:rotate(-8deg)}
+.mini.b{right:0;top:0;transform:rotate(10deg)}
+
+/* filters + grid */
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin-inline:-2px;padding:2px}
+.chips::-webkit-scrollbar{display:none}
+.chip{border:0;border-radius:999px;height:36px;padding:0 14px;background:var(--card);color:var(--sub);font-weight:900;font-size:14px;white-space:nowrap;flex:0 0 auto}
+.chip[aria-pressed="true"]{background:var(--ink);color:#fff}
+.chip.add{background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent);position:relative;overflow:hidden}
+.chip.add input{position:absolute;inset:0;opacity:0;font-size:0}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tile{position:relative;aspect-ratio:1/1;border-radius:16px;overflow:hidden;background:var(--tile);border:0;padding:0;display:block;width:100%;max-width:100%}
+.tile img{width:100%;height:100%;object-fit:cover;display:block}
+.tile .yr{position:absolute;left:6px;bottom:6px;font-size:11px;font-weight:900;padding:2px 7px;border-radius:10px;background:rgba(255,255,255,.94);color:var(--ink)}
+.tile .ok{position:absolute;right:6px;top:6px;width:22px;height:22px;border-radius:11px;background:var(--green);display:grid;place-items:center}
+.tile .sel{position:absolute;right:6px;top:6px;width:24px;height:24px;border-radius:12px;border:2px solid #fff;background:rgba(0,0,0,.25);display:grid;place-items:center}
+.tile.on{box-shadow:inset 0 0 0 3px var(--accent)}
+.tile.on .sel{background:var(--accent)}
+.tile .busy{position:absolute;inset:0;display:grid;place-items:center;color:var(--sub);font-size:12px;font-weight:800;text-align:center;padding:6px}
+.tile .up{position:absolute;right:6px;top:6px;width:10px;height:10px;border-radius:5px;background:var(--amber);box-shadow:0 0 0 2px #fff}
+
+/* cards */
+.card{background:var(--card);border-radius:22px;padding:18px;box-shadow:0 3px 10px rgba(20,26,46,.06);display:flex;flex-direction:column;gap:12px}
+.card h2{margin:0;font-size:20px;font-weight:900}
+.steps{display:flex;flex-direction:column;gap:12px;margin:0;padding:0;list-style:none}
+.steps li{display:flex;gap:12px;align-items:flex-start;color:var(--sub);font-size:15px}
+.steps b{flex:0 0 28px;height:28px;border-radius:14px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:15px}
+.field{width:100%;min-height:48px;border:0;border-radius:14px;background:var(--bg);padding:0 14px;font-size:16px;font-weight:700;color:var(--ink)}
+textarea.field{padding:12px 14px;min-height:90px;resize:vertical}
+.field::placeholder{color:#8A93AE}
+.row{display:flex;gap:10px;align-items:center}
+.row > *{min-width:0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.lbl{font-size:13px;font-weight:800;color:var(--sub)}
+.hint{font-size:13px;color:var(--sub);margin:0;font-weight:600}
+.empty{text-align:center;color:var(--sub);padding:28px 0;font-weight:700}
+
+/* floating save */
+.dock{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;pointer-events:none;z-index:5;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.dock .pill{pointer-events:auto;height:56px;border:0;border-radius:28px;background:var(--ink);color:#fff;font-weight:900;font-size:16px;padding:0 14px 0 24px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 24px rgba(20,26,46,.3);max-width:100%}
+.dock .pill i{width:28px;height:28px;border-radius:14px;background:var(--accent);display:grid;place-items:center;flex:0 0 auto}
+.dock .pill.plain{padding:0 24px}
+
+/* sheets */
+.sheet{position:fixed;inset:0;z-index:20;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.sheet .in{max-width:460px;margin:0 auto;padding-top:calc(12px + env(safe-area-inset-top,0px));padding-bottom:calc(36px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+.shead{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px}
+.shead h2{margin:0;font-size:22px;font-weight:900}
+.stage{background:var(--night);border-radius:16px;overflow:hidden}
+#edCanvas{display:block;width:100%;height:auto;touch-action:none}
+.tools{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.tools .btn{padding:0 6px;font-size:14px}
+.result{display:grid;grid-template-columns:130px minmax(0,1fr);gap:14px;align-items:center}
+.result .pv{height:130px;border-radius:14px;background:var(--tile);display:grid;place-items:center;padding:8px}
+.result .pv img{max-width:100%;max-height:100%;background:#fff;padding:4px;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+.dpi{font-size:24px;font-weight:900;line-height:1.1}
+.dpi.good{color:var(--green)}.dpi.ok{color:var(--amber)}.dpi.low{color:var(--danger)}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;min-height:44px}
+.toggle input{appearance:none;width:51px;height:31px;border-radius:16px;background:var(--line);position:relative;flex:0 0 auto;transition:background .2s;margin:0}
+.toggle input::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:14px;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.2);transition:transform .2s}
+.toggle input:checked{background:var(--green)}
+.toggle input:checked::after{transform:translateX(20px)}
+.toggle span{display:flex;flex-direction:column}
+.toggle small{font-size:13px;color:var(--sub);font-weight:600}
+.seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--bg);border-radius:14px;padding:4px;gap:4px}
+.seg button{border:0;border-radius:10px;min-height:40px;background:transparent;font-weight:900;color:var(--sub)}
+.seg button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(20,26,46,.12)}
+select.field{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--sub) 50%),linear-gradient(135deg,var(--sub) 50%,transparent 50%);background-position:calc(100% - 20px) 50%,calc(100% - 14px) 50%;background-size:6px 6px;background-repeat:no-repeat;padding-right:36px}
+.fname{font:500 12px var(--mono);color:var(--sub);word-break:break-all}
+
+/* camera-flow sheet */
+.sheet.cam{background:var(--night);color:#fff}
+.cam .instr{align-self:center;background:#fff;color:var(--ink);border-radius:20px;padding:12px 18px;display:flex;flex-direction:column;align-items:center;gap:6px;box-shadow:0 8px 20px rgba(0,0,0,.25);max-width:100%;text-align:center}
+.cam .instr b{font-size:18px;font-weight:900}
+.bars{display:flex;gap:6px}
+.bars span{width:22px;height:6px;border-radius:3px;background:var(--line)}
+.bars span.on{background:var(--accent)}
+.cam .shot{border-radius:18px;background:#2A2A30;aspect-ratio:3/4;max-width:100%;display:grid;place-items:center;overflow:hidden;position:relative}
+.cam .shot canvas{max-width:100%;max-height:100%;display:block}
+.cam .chipdark{height:32px;padding:0 12px;border-radius:16px;background:rgba(255,255,255,.16);font-weight:800;font-size:14px;display:inline-flex;align-items:center}
+.cam .shutter{width:88px;height:88px;border-radius:44px;border:5px solid #fff;background:var(--accent);position:relative;overflow:hidden;display:grid;place-items:center;align-self:center;padding:0}
+.cam .shutter input{position:absolute;inset:0;opacity:0;font-size:0}
+.cam .closebtn{height:44px;padding:0 18px;border-radius:22px;border:0;background:rgba(255,255,255,.18);color:#fff;font-weight:900}
+.cam .tip{font-size:14px;color:#C9CEE0;text-align:center;margin:0}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom,0px));background:var(--ink);color:#fff;padding:11px 18px;border-radius:16px;font-size:15px;font-weight:800;z-index:40;max-width:calc(100% - 32px);text-align:center;box-shadow:0 8px 20px rgba(20,26,46,.25)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="app">
+<main id="home">
+  <div class="top">
+    <div class="who"><span class="greet" id="greet">Welcome back</span><h1>Shoebox</h1></div>
+    <button class="btn soft small" id="selectBtn" hidden>Select</button>
+    <button class="round" id="settingsBtn" aria-label="Settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+  </div>
+
+  <section class="hero" id="hero">
+    <div class="stack" aria-hidden="true"><div class="mini a"><div id="miniA" style="background-color:var(--sage)"></div></div><div class="mini b"><div id="miniB" style="background-color:var(--warm)"></div></div></div>
+    <span class="album" id="heroAlbum">Family Photos</span>
+    <span class="big" id="heroBig">Ready to scan</span>
+    <div class="prog"><span id="heroProg" style="width:0%"></span></div>
+    <div class="acts">
+      <label class="btn white" for="camIn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Scan<input id="camIn" type="file" accept="image/*" capture="environment"></label>
+      <label class="btn ghost" for="libIn">Import<input id="libIn" type="file" accept="image/*" multiple></label>
+    </div>
+  </section>
+
+  <section class="card" id="batch" hidden aria-label="Edit selected scans">
+    <div class="row"><h2 id="selCount" style="flex:1">0 selected</h2><button class="btn soft small" id="selAll">Select all</button></div>
+    <input class="field" id="bWho" placeholder="Who's in them" autocomplete="off">
+    <div class="two"><input class="field" id="bWhen" placeholder="When" autocomplete="off"><input class="field" id="bNote" placeholder="Place or notes" autocomplete="off"></div>
+    <p class="hint">Blank fields keep each photo's own labels.</p>
+    <button class="btn primary" id="bApply">Apply labels</button>
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn soft" id="bRotL" aria-label="Rotate left">↺</button>
+      <button class="btn soft" id="bRotR" aria-label="Rotate right">↻</button>
+      <button class="btn soft" id="bAuto" hidden>Upright with Claude</button>
+      <span style="flex:1"></span>
+      <button class="btn soft danger" id="bDel">Delete</button>
+    </div>
+    <div class="row" id="bDelConfirm" hidden><span class="hint" style="flex:1">Delete <span id="bDelN">0</span> scans from Shoebox? Saved copies stay in Photos.</span><button class="btn soft small" id="bDelNo">Keep</button><button class="btn primary small" id="bDelYes" style="background:var(--danger)">Delete</button></div>
+  </section>
+
+  <div class="chips" id="chips" hidden role="group" aria-label="Filter scans">
+    <button class="chip" data-f="all" aria-pressed="true">All</button>
+    <button class="chip" data-f="save" aria-pressed="false">To save</button>
+    <button class="chip" data-f="names" aria-pressed="false">Needs names</button>
+  </div>
+  <div class="grid" id="grid"></div>
+  <section class="card" id="emptyCard" hidden>
+    <h2>Your shoebox is empty</h2>
+    <ol class="steps">
+      <li><b>1</b><span>Lay a print on a dark, matte surface in soft window light. Turn the flash off.</span></li>
+      <li><b>2</b><span>Tap Scan and hold the phone flat above the print. Shoebox finds the edges and squares it up at full resolution.</span></li>
+      <li><b>3</b><span>Add names and dates, then save everything to Photos.</span></li>
+    </ol>
+  </section>
+  <p class="hint" id="storeNote" hidden></p>
+</main>
+
+<div class="dock" id="dock" hidden><button class="pill" id="saveAllBtn"><span id="saveAllTxt">Save to Photos</span><i><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v12M6 12l6 6 6-6"/></svg></i></button></div>
+
+<!-- capture flow: glare shots and back -->
+<div class="sheet cam" id="camSheet" hidden role="dialog" aria-modal="true" aria-labelledby="camTitle">
+  <div class="in">
+    <div class="shead"><button class="closebtn" id="camDone">Done</button><span class="chipdark" id="camCount">1 scanned</span></div>
+    <div class="instr"><b id="camTitle">Tilt a little, then take the next shot</b><div class="bars" id="camBars"></div><span class="hint" id="camSub" style="color:var(--sub)"></span></div>
+    <div class="shot"><canvas id="camPrev" aria-label="Last shot, with the print outlined"></canvas></div>
+    <p class="tip" id="camTip"></p>
+    <label class="shutter" for="camNext" aria-label="Take the next photo"><input id="camNext" type="file" accept="image/*" capture="environment"></label>
+    <div class="row" style="justify-content:center;flex-wrap:wrap">
+      <label class="btn soft small" for="camLib" style="position:relative;overflow:hidden">Choose from Photos<input id="camLib" type="file" accept="image/*"></label>
+      <button class="btn soft small" id="camSkip">Skip</button>
+    </div>
+  </div>
+</div>
+
+<!-- editor -->
+<div class="sheet" id="edSheet" hidden role="dialog" aria-modal="true" aria-labelledby="edTitle">
+  <div class="in">
+    <div class="shead"><h2 id="edTitle">No. 001</h2><button class="btn dark small" id="edDone">Done</button></div>
+    <div class="chips" id="edTabs"></div>
+    <section class="card" style="padding:14px">
+      <p class="hint" id="edNote">Drag the corners onto the edges of the print. The thick edge becomes the top.</p>
+      <div class="stage"><canvas id="edCanvas"></canvas></div>
+      <div class="tools">
+        <button class="btn soft" id="rotL" aria-label="Rotate left">↺</button>
+        <button class="btn soft" id="rotR" aria-label="Rotate right">↻</button>
+        <button class="btn soft" id="autoBtn">Edges</button>
+        <button class="btn soft" id="fullBtn">Whole</button>
+      </div>
+      <button class="btn soft danger" id="dropShotBtn" hidden>Remove this shot</button>
+    </section>
+    <section class="card">
+      <div class="result">
+        <div class="pv"><img id="edPrev" alt="Straightened preview"></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span class="dpi" id="edDpi"></span><span class="hint" id="edDpiNote"></span>
+          <label class="toggle" id="restoreRow"><span>Color restore</span><input type="checkbox" id="prevRestore"></label>
+        </div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Details</h2>
+      <input class="field" id="whoIn" placeholder="Who's in it" autocomplete="off">
+      <input class="field" id="whenIn" placeholder="When (1962, or 7/4/1962)" autocomplete="off">
+      <input class="field" id="noteIn" placeholder="Place or notes" autocomplete="off">
+      <div id="backBox" hidden style="display:flex;flex-direction:column;gap:8px">
+        <span class="lbl">Writing on the back</span>
+        <textarea class="field" id="backIn" placeholder="Type what’s written on the back"></textarea>
+        <div class="row"><button class="btn soft small" id="readBackBtn" hidden>Read the back with Claude</button><span class="hint" id="readNote"></span></div>
+      </div>
+      <span class="fname" id="edName"></span>
+    </section>
+    <div class="two">
+      <button class="btn primary" id="saveOneBtn">Save to Photos</button>
+      <button class="btn soft" id="viewFullBtn">Check full size</button>
+    </div>
+    <div id="fullWrap" hidden class="card"><p class="hint" id="fullNote"></p><img id="fullImg" alt="Full-resolution result" style="width:100%;border-radius:8px"></div>
+    <button class="btn soft danger" id="removeBtn">Delete this scan</button>
+    <div class="row" id="removeConfirm" hidden><span class="hint" style="flex:1">Delete this scan from Shoebox? A saved copy stays in Photos.</span><button class="btn soft small" id="removeNo">Keep</button><button class="btn primary small" id="removeYes" style="background:var(--danger)">Delete</button></div>
+  </div>
+</div>
+
+<!-- save -->
+<div class="sheet" id="saveSheet" hidden role="dialog" aria-modal="true" aria-labelledby="saveTitle">
+  <div class="in">
+    <div class="shead"><h2 id="saveTitle">Save 0 scans</h2><button class="btn soft small" id="saveClose">Close</button></div>
+    <div id="saveOpts" style="display:flex;flex-direction:column;gap:14px">
+      <section class="card">
+        <h2 style="font-size:18px">To Photos</h2>
+        <p class="hint">Shoebox prepares a few scans at a time. Tap <b>Save</b>, then <b>Save Images</b> in the share sheet, and they go straight into Photos, dated by the year you typed.</p>
+        <button class="btn primary" id="saveEach">Start saving</button>
+      </section>
+      <section class="card">
+        <h2 style="font-size:18px">As a zip, to Files</h2>
+        <p class="hint">Handy for moving a whole box to your Mac. Tap <b>Save</b>, then <b>Save to Files</b>.</p>
+        <button class="btn soft" id="saveZip">Make a zip</button>
+      </section>
+    </div>
+    <section class="card" id="saveProgress" hidden>
+      <b id="saveStatus">Preparing…</b>
+      <div style="height:8px;border-radius:4px;background:var(--tile)"><span id="saveBar" style="display:block;height:8px;border-radius:4px;background:var(--accent);width:0%"></span></div>
+      <button class="btn primary" id="saveGo" hidden>Save to Photos</button>
+      <button class="btn soft small" id="saveStop">Stop</button>
+    </section>
+  </div>
+</div>
+
+<!-- settings -->
+<div class="sheet" id="setSheet" hidden role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <div class="in">
+    <div class="shead"><h2 id="setTitle">Settings</h2><button class="btn dark small" id="setDone">Done</button></div>
+    <section class="card">
+      <label class="lbl" for="albumIn">Album or box name</label>
+      <input class="field" id="albumIn" placeholder="e.g. Grandma's red album" autocomplete="off">
+      <p class="hint">Written into every photo's description, so you can search for it in Photos.</p>
+    </section>
+    <section class="card">
+      <span class="lbl" id="shotsLbl">Shots per print</span>
+      <div class="seg" role="group" aria-labelledby="shotsLbl" id="shotsSeg"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button></div>
+      <p class="hint">For glossy prints, use 2–3 and tilt the phone a little between shots. Shoebox keeps the parts of each shot without glare.</p>
+      <label class="toggle"><span>Photograph the back<small>Asks you to flip each print over</small></span><input type="checkbox" id="backsIn"></label>
+      <label class="lbl" for="sizeIn">Typical print size</label>
+      <select class="field" id="sizeIn"><option value="3.5">Wallet 2.5×3.5</option><option value="5">3.5×5</option><option value="6">4×6</option><option value="7">5×7</option><option value="10">8×10</option></select>
+    </section>
+    <section class="card">
+      <label class="toggle"><span>Save a color-restored copy<small>Fixes fading; the untouched scan is always saved too</small></span><input type="checkbox" id="restoreIn"></label>
+      <label class="lbl" for="fmtIn">Save as</label>
+      <select class="field" id="fmtIn"><option value="jpeg">JPEG, max quality</option><option value="png">PNG, lossless</option></select>
+    </section>
+    <section class="card" id="aiCard" hidden>
+      <label class="toggle"><span>Turn new scans upright with Claude<small>Uses your Claude usage for each scan</small></span><input type="checkbox" id="aiRotIn"></label>
+      <label class="toggle"><span>Read backs automatically<small>Fills in names and dates from the writing</small></span><input type="checkbox" id="aiBackIn"></label>
+    </section>
+    <section class="card">
+      <span class="lbl">Storage</span>
+      <p class="hint" id="usageNote">Scans are kept in your account until you clear them.</p>
+      <button class="btn soft danger" id="clearBtn">Remove saved scans</button>
+      <div class="row" id="clearConfirm" hidden><span class="hint" style="flex:1">Remove <span id="clearN">0</span> saved scans from Shoebox? They stay in Photos.</span><button class="btn soft small" id="clearNo">Keep</button><button class="btn primary small" id="clearYes" style="background:var(--danger)">Remove</button></div>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden role="status"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const MAX_OUT = 16000000, GLARE_THR = 18;
+function toast(msg){const t=$('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,3600);}
+const loadImage = url => new Promise((res,rej)=>{const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error('load')); i.src=url;});
+const tick = () => new Promise(r=>setTimeout(r,0));
+function downscale(img, maxSide){
+  const s=Math.min(1, maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+  const w=Math.max(1,Math.round(img.naturalWidth*s)), h=Math.max(1,Math.round(img.naturalHeight*s));
+  const c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d',{willReadFrequently:true}); x.drawImage(img,0,0,w,h);
+  return {canvas:c, data:x.getImageData(0,0,w,h).data, w, h, s};
+}
+
+/* ---------- finding the print ---------- */
+function detectQuad(src){
+  const {data:d,w,h}=src, n=w*h, ring=Math.max(2,Math.round(Math.min(w,h)*.02));
+  const R=[],G=[],B=[];
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(x<ring||y<ring||x>=w-ring||y>=h-ring){const i=(y*w+x)*4; R.push(d[i]);G.push(d[i+1]);B.push(d[i+2]);} }
+  const med=a=>{a.sort((p,q)=>p-q); return a[a.length>>1];}; const r0=med(R),g0=med(G),b0=med(B);
+  let dist=new Float32Array(n);
+  for(let i=0;i<n;i++){const j=i*4; dist[i]=(Math.abs(d[j]-r0)+Math.abs(d[j+1]-g0)+Math.abs(d[j+2]-b0))/3;}
+  const tmp=new Float32Array(n), rad=2;
+  for(let y=0;y<h;y++){let s=0,c=0;for(let x=-rad;x<w;x++){if(x+rad<w){s+=dist[y*w+x+rad];c++;} if(x-rad-1>=0){s-=dist[y*w+x-rad-1];c--;} if(x>=0) tmp[y*w+x]=s/c;}}
+  for(let x=0;x<w;x++){let s=0,c=0;for(let y=-rad;y<h;y++){if(y+rad<h){s+=tmp[(y+rad)*w+x];c++;} if(y-rad-1>=0){s-=tmp[(y-rad-1)*w+x];c--;} if(y>=0) dist[y*w+x]=s/c;}}
+  const hist=new Float64Array(256); for(let i=0;i<n;i++) hist[Math.min(255,dist[i]|0)]++;
+  let sum=0; for(let t=0;t<256;t++) sum+=t*hist[t];
+  let sB=0,wB=0,best=0,T=30;
+  for(let t=0;t<256;t++){wB+=hist[t]; if(!wB) continue; const wF=n-wB; if(!wF) break; sB+=t*hist[t];
+    const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF); if(v>best){best=v;T=t;}}
+  T=Math.max(T,22);
+  const lab=new Int32Array(n), q=new Int32Array(n); let bestId=0,bestA=0,id=0;
+  for(let s=0;s<n;s++){ if(lab[s]||dist[s]<=T) continue; id++; let hd=0,tl=0,a=0; q[tl++]=s; lab[s]=id;
+    while(hd<tl){const p=q[hd++]; a++; const x=p%w,y=(p/w)|0;
+      if(x>0&&!lab[p-1]&&dist[p-1]>T){lab[p-1]=id;q[tl++]=p-1;} if(x<w-1&&!lab[p+1]&&dist[p+1]>T){lab[p+1]=id;q[tl++]=p+1;}
+      if(y>0&&!lab[p-w]&&dist[p-w]>T){lab[p-w]=id;q[tl++]=p-w;} if(y<h-1&&!lab[p+w]&&dist[p+w]>T){lab[p+w]=id;q[tl++]=p+w;}}
+    if(a>bestA){bestA=a;bestId=id;} }
+  if(bestA<n*.04) return null;
+  let tl=[0,0,Infinity],tr=[0,0,-Infinity],br=[0,0,-Infinity],bl=[0,0,Infinity];
+  for(let p=0;p<n;p++){ if(lab[p]!==bestId) continue; const x=p%w,y=(p/w)|0, s=x+y, df=x-y;
+    if(s<tl[2]) tl=[x,y,s]; if(s>br[2]) br=[x,y,s]; if(df>tr[2]) tr=[x,y,df]; if(df<bl[2]) bl=[x,y,df]; }
+  const k=1/src.s; return [tl,tr,br,bl].map(([x,y])=>[(x+.5)*k,(y+.5)*k]);
+}
+const insetQuad=(w,h,f=.04)=>[[w*f,h*f],[w*(1-f),h*f],[w*(1-f),h*(1-f)],[w*f,h*(1-f)]];
+const fullQuad=(w,h)=>[[0,0],[w,0],[w,h],[0,h]];
+
+/* ---------- perspective ---------- */
+function solve(A,b){const n=b.length; for(let i=0;i<n;i++){let m=i; for(let r=i+1;r<n;r++) if(Math.abs(A[r][i])>Math.abs(A[m][i])) m=r;
+  [A[i],A[m]]=[A[m],A[i]];[b[i],b[m]]=[b[m],b[i]]; for(let r=i+1;r<n;r++){const f=A[r][i]/A[i][i]; for(let c=i;c<n;c++) A[r][c]-=f*A[i][c]; b[r]-=f*b[i];}}
+  const x=new Array(n); for(let i=n-1;i>=0;i--){let s=b[i]; for(let c=i+1;c<n;c++) s-=A[i][c]*x[c]; x[i]=s/A[i][i];} return x;}
+function homography(dst,src){const A=[],b=[]; for(let i=0;i<4;i++){const [u,v]=dst[i],[x,y]=src[i];
+  A.push([u,v,1,0,0,0,-u*x,-v*x]); b.push(x); A.push([0,0,0,u,v,1,-u*y,-v*y]); b.push(y);} return solve(A,b);}
+const applyH=(m,u,v)=>{const d=m[6]*u+m[7]*v+1; return [(m[0]*u+m[1]*v+m[2])/d,(m[3]*u+m[4]*v+m[5])/d];};
+const dlen=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+const ordered=(quad,rot)=>[0,1,2,3].map(i=>quad[(i+rot)%4]);
+const rect=(W,H)=>[[0,0],[W,0],[W,H],[0,H]];
+function geometry(quad, rot){
+  const q=ordered(quad,rot);
+  let W=Math.max(dlen(q[0],q[1]),dlen(q[3],q[2])), H=Math.max(dlen(q[0],q[3]),dlen(q[1],q[2]));
+  const k=Math.min(1,Math.sqrt(MAX_OUT/(W*H))); return {q, W:Math.max(1,Math.round(W*k)), H:Math.max(1,Math.round(H*k))};
+}
+// Bilinear warp of output rows v0..v1 (width W) from a source buffer whose top-left sits at (ox,oy) in shot coordinates.
+function warpRows(src, sw, sh, m, ox, oy, W, v0, v1){
+  const [a,b,c,d,e,f,g,h]=m, out=new Uint8ClampedArray(W*(v1-v0)*4), mx=sw-1, my=sh-1;
+  for(let v=v0;v<v1;v++){ const vv=v+.5, row=(v-v0)*W; for(let u=0;u<W;u++){ const uu=u+.5, den=g*uu+h*vv+1;
+    let x=(a*uu+b*vv+c)/den-.5-ox, y=(d*uu+e*vv+f)/den-.5-oy;
+    if(x<0)x=0; else if(x>mx)x=mx; if(y<0)y=0; else if(y>my)y=my;
+    const x0=x|0,y0=y|0,x1=x0<mx?x0+1:x0,y1=y0<my?y0+1:y0,fx=x-x0,fy=y-y0;
+    const i00=(y0*sw+x0)*4,i10=(y0*sw+x1)*4,i01=(y1*sw+x0)*4,i11=(y1*sw+x1)*4, j=(row+u)*4;
+    for(let ch=0;ch<3;ch++){const t=src[i00+ch]+(src[i10+ch]-src[i00+ch])*fx, bt=src[i01+ch]+(src[i11+ch]-src[i01+ch])*fx; out[j+ch]=t+(bt-t)*fy;}
+    out[j+3]=255; } }
+  return out;
+}
+
+/* ---------- glare removal: align every shot to the first, then per pixel drop the bright outliers ---------- */
+function channelMedians(a){ const H=[new Uint32Array(256),new Uint32Array(256),new Uint32Array(256)]; let n=0;
+  for(let i=0;i<a.length;i+=16){H[0][a[i]]++;H[1][a[i+1]]++;H[2][a[i+2]]++;n++;}
+  return H.map(h=>{let s=0; for(let t=0;t<256;t++){s+=h[t]; if(s>=n/2) return t;} return 128;}); }
+function computeGains(arrays){ const m0=channelMedians(arrays[0]);
+  return arrays.map((a,k)=>{ if(!k) return [1,1,1]; const m=channelMedians(a); return m.map((v,c)=>Math.min(1.6,Math.max(.6,m0[c]/Math.max(1,v)))); }); }
+function mergeArrays(arrays, gains, px){
+  const n=arrays.length; if(n===1) return arrays[0];
+  const out=new Uint8ClampedArray(px*4), R=new Float32Array(n),G=new Float32Array(n),B=new Float32Array(n),L=new Float32Array(n);
+  for(let p=0;p<px;p++){ const j=p*4; let mn=1e9;
+    for(let k=0;k<n;k++){ const a=arrays[k], g=gains[k]; R[k]=a[j]*g[0]; G[k]=a[j+1]*g[1]; B[k]=a[j+2]*g[2]; L[k]=.299*R[k]+.587*G[k]+.114*B[k]; if(L[k]<mn) mn=L[k]; }
+    let r=0,gg=0,b=0,c=0, lim=mn+GLARE_THR;
+    for(let k=0;k<n;k++) if(L[k]<=lim){ r+=R[k]; gg+=G[k]; b+=B[k]; c++; }
+    out[j]=r/c; out[j+1]=gg/c; out[j+2]=b/c; out[j+3]=255; }
+  return out;
+}
+// Low-resolution merged render, used for previews, thumbnails, exposure matching and color-restore levels.
+function mergeLow(sources, shots, rot, maxSide){
+  const {W,H}=geometry(shots[0].quad,rot), k=Math.min(1,maxSide/Math.max(W,H));
+  const w=Math.max(1,Math.round(W*k)), h=Math.max(1,Math.round(H*k));
+  const arrays=shots.map((sh,i)=>{ const s=sources[i]; const m=homography(rect(w,h), ordered(sh.quad,rot).map(([x,y])=>[x*s.s,y*s.s])); return warpRows(s.data,s.w,s.h,m,0,0,w,0,h); });
+  const gains=computeGains(arrays); return {data:mergeArrays(arrays,gains,w*h), w, h, gains};
+}
+
+/* ---------- color restore: per-channel levels stretch plus a little saturation ---------- */
+function restoreLuts(a){
+  const H=[new Uint32Array(256),new Uint32Array(256),new Uint32Array(256)]; let n=0;
+  for(let i=0;i<a.length;i+=4){H[0][a[i]]++;H[1][a[i+1]]++;H[2][a[i+2]]++;n++;}
+  return H.map(h=>{ let s=0,lo=0,hi=255; for(let t=0;t<256;t++){s+=h[t]; if(s>n*.005){lo=t;break;}} s=0; for(let t=255;t>=0;t--){s+=h[t]; if(s>n*.005){hi=t;break;}}
+    if(hi-lo<40){lo=0;hi=255;} const L=new Uint8ClampedArray(256); for(let t=0;t<256;t++) L[t]=(t-lo)*255/(hi-lo); return L; });
+}
+function applyRestore(a, L){ for(let i=0;i<a.length;i+=4){ const r=L[0][a[i]], g=L[1][a[i+1]], b=L[2][a[i+2]], y=.299*r+.587*g+.114*b;
+  a[i]=y+(r-y)*1.12; a[i+1]=y+(g-y)*1.12; a[i+2]=y+(b-y)*1.12; } }
+function toDataURL(data,w,h,restore){ const c=document.createElement('canvas'); c.width=w; c.height=h; const d=new Uint8ClampedArray(data);
+  if(restore) applyRestore(d, restoreLuts(data)); c.getContext('2d').putImageData(new ImageData(d,w,h),0,0); const u=c.toDataURL('image/jpeg',.85); c.width=1; return u; }
+
+/* ---------- full-resolution render, in bands to stay inside iPhone memory limits ---------- */
+function readRegion(img,bx,by,bw,bh){
+  const buf=new Uint8ClampedArray(bw*bh*4), strip=Math.max(1,Math.min(1024,Math.floor(MAX_OUT/bw)));
+  const sc=document.createElement('canvas'); sc.width=bw; sc.height=strip; const sx=sc.getContext('2d',{willReadFrequently:true});
+  for(let y=0;y<bh;y+=strip){const hh=Math.min(strip,bh-y); sx.clearRect(0,0,bw,strip); sx.drawImage(img,bx,by+y,bw,hh,0,0,bw,hh); buf.set(sx.getImageData(0,0,bw,hh).data, y*bw*4);}
+  sc.width=1; sc.height=1; return buf;
+}
+async function renderSide(shots, rot, opts={}){
+  const imgs=[]; for(const s of shots) imgs.push(await loadImage(s.url));
+  const smalls=imgs.map(i=>downscale(i,800)); const low=mergeLow(smalls,shots,rot,500); smalls.forEach(s=>s.canvas.width=1);
+  const {W,H}=geometry(shots[0].quad,rot);
+  const hms=shots.map(s=>homography(rect(W,H), ordered(s.quad,rot)));
+  const out=document.createElement('canvas'); out.width=W; out.height=H; const ox=out.getContext('2d',{willReadFrequently:true});
+  const rows=Math.max(1,Math.floor(4000000/W));
+  for(let v0=0; v0<H; v0+=rows){ const v1=Math.min(H,v0+rows), bands=[];
+    for(let k=0;k<shots.length;k++){ const img=imgs[k], m=hms[k], pts=[[0,v0],[W,v0],[W,v1],[0,v1]].map(([u,v])=>applyH(m,u,v));
+      const bx=Math.max(0,Math.floor(Math.min(...pts.map(p=>p[0])))-2), by=Math.max(0,Math.floor(Math.min(...pts.map(p=>p[1])))-2);
+      const ex=Math.min(img.naturalWidth,Math.ceil(Math.max(...pts.map(p=>p[0])))+2), ey=Math.min(img.naturalHeight,Math.ceil(Math.max(...pts.map(p=>p[1])))+2);
+      const bw=Math.max(1,ex-bx), bh=Math.max(1,ey-by);
+      bands.push(warpRows(readRegion(img,bx,by,bw,bh),bw,bh,m,bx,by,W,v0,v1)); }
+    ox.putImageData(new ImageData(mergeArrays(bands,low.gains,W*(v1-v0)),W,v1-v0),0,v0);
+    if(opts.progress) opts.progress(v1/H); await tick(); }
+  const fmt=S.fmt, enc=async()=>{ let b=await new Promise(r=>out.toBlob(r, fmt==='png'?'image/png':'image/jpeg', 1)); if(!b) throw new Error('encode');
+    if(fmt==='jpeg') b=addExif(b, opts.desc||'', opts.date||''); return b; };
+  const blob=await enc(); let restored=null;
+  if(opts.restore){ const L=restoreLuts(low.data);
+    for(let v0=0; v0<H; v0+=rows){ const hh=Math.min(rows,H-v0), id=ox.getImageData(0,v0,W,hh); applyRestore(id.data,L); ox.putImageData(id,0,v0); await tick(); }
+    restored=await enc(); }
+  out.width=1; out.height=1; return {blob, restored, W, H};
+}
+
+/* ---------- labels, filenames, metadata ---------- */
+const pad=(n,l=2)=>String(n).padStart(l,'0');
+function parseWhen(s){ s=(s||'').trim(); let m=s.match(/\b(\d{1,2})\/(\d{1,2})\/(1[89]\d\d|20\d\d)\b/);
+  if(m) return {y:+m[3],mo:+m[1],d:+m[2]};
+  m=s.match(/\b(1[89]\d\d|20\d\d)(?:[-\/.](\d{1,2})(?:[-\/.](\d{1,2}))?)?/); if(!m) return null;
+  return {y:+m[1],mo:m[2]?+m[2]:0,d:m[3]?+m[3]:0}; }
+function exifDate(s){const p=parseWhen(s); if(!p) return ''; const mo=p.mo>=1&&p.mo<=12?p.mo:1, d=p.d>=1&&p.d<=31?p.d:1; return `${p.y}:${pad(mo)}:${pad(d)} 12:00:00`;}
+const caption=it=>[it.who,it.note,it.when].map(s=>(s||'').trim()).filter(Boolean).join(' - ');
+function description(it){ const parts=[caption(it)]; if((it.backText||'').trim()) parts.push('Back: '+it.backText.trim().replace(/\s+/g,' ')); const box=(S.album||'').trim(); if(box) parts.push(box); return parts.filter(Boolean).join(' | '); }
+const slug=s=>(s||'').normalize('NFKD').replace(/[^\w\s-]/g,'').trim().replace(/[\s_]+/g,'-').replace(/-+/g,'-').slice(0,40);
+function baseName(it){ const p=parseWhen(it.when); const parts=[p?String(p.y)+(p.mo?'-'+pad(p.mo):'')+(p.d?'-'+pad(p.d):''):'', slug(it.who), slug(it.note)].filter(Boolean);
+  return (parts.join('_')||'scan')+'_'+pad(it.n,3); }
+const ext=()=>S.fmt==='png'?'.png':'.jpg';
+function addExif(blob, desc, dt){
+  const enc=s=>{const a=[]; for(const ch of s.normalize('NFKD')){const c=ch.charCodeAt(0); if(c>=32&&c<127) a.push(c);} a.push(0); return a;};
+  const ifd0=[]; if(desc) ifd0.push([0x010E,enc(desc.slice(0,1500))]); ifd0.push([0x0131,enc('Shoebox scanner')]); if(dt) ifd0.push([0x0132,enc(dt)]);
+  const ex=dt?[[0x9003,enc(dt)]]:[]; if(ex.length) ifd0.push([0x8769,null]);
+  const isz=k=>2+12*k+4, dl=l=>l.reduce((s,[,v])=>s+(v&&v.length>4?v.length+(v.length&1):0),0);
+  const o0=8, d0=o0+isz(ifd0.length), oe=d0+dl(ifd0), de=oe+isz(ex.length), total=ex.length?de+dl(ex):oe;
+  const buf=new Uint8Array(total), dv=new DataView(buf.buffer); buf.set([0x4D,0x4D,0,42,0,0,0,8]);
+  const wr=(off,list,dOff)=>{dv.setUint16(off,list.length); let p=off+2;
+    for(const [tag,v] of list){dv.setUint16(p,tag);
+      if(v===null){dv.setUint16(p+2,4);dv.setUint32(p+4,1);dv.setUint32(p+8,oe);}
+      else{dv.setUint16(p+2,2);dv.setUint32(p+4,v.length); if(v.length<=4) buf.set(v,p+8); else{dv.setUint32(p+8,dOff);buf.set(v,dOff);dOff+=v.length+(v.length&1);}}
+      p+=12;} dv.setUint32(p,0);};
+  wr(o0,ifd0,d0); if(ex.length) wr(oe,ex,de);
+  const len=2+6+total, seg=new Uint8Array(2+len); seg.set([0xFF,0xE1,len>>8,len&255,0x45,0x78,0x69,0x66,0,0]); seg.set(buf,10);
+  return new Blob([blob.slice(0,2),seg,blob.slice(2)],{type:'image/jpeg'});
+}
+/* ---------- app state ---------- */
+const S = { album:'Family Photos', size:6, shots:1, backs:false, restore:false, fmt:'jpeg', aiRot:false, aiBack:false, last:0 };
+let items = [], filter = 'all', selecting = false, current = null, ed = null, flow = null, saving = null;
+let sample = null, sampleMax = 5, kept = false;
+const pend = new Map();
+
+function dpiOf(it){ const s=it.front[0]; if(!s||!s.quad) return null; const {W,H}=geometry(s.quad,it.rot); return Math.round(Math.max(W,H)/(+S.size||6)); }
+const dpiClass=d=>d>=300?'good':d>=200?'ok':'low';
+async function buildFiles(it, progress){
+  const base=baseName(it), date=exifDate(it.when), files=[];
+  const f=await renderSide(it.front, it.rot, {restore:S.restore, desc:description(it), date, progress});
+  files.push({name:base+ext(), blob:f.blob}); if(f.restored) files.push({name:base+'_restored'+ext(), blob:f.restored});
+  if(it.back){ const b=await renderSide([it.back], it.backRot, {desc:'Back of photo'+(caption(it)?': '+caption(it):''), date}); files.push({name:base+'_back'+ext(), blob:b.blob}); }
+  return files;
+}
+
+/* ---------- keeping scans on this phone (IndexedDB) ---------- */
+const IDB={db:null,
+  open(){ return new Promise((res,rej)=>{ const r=indexedDB.open('shoebox',1);
+    r.onupgradeneeded=()=>{ const d=r.result; ['scans','blobs','meta'].forEach(n=>{ if(!d.objectStoreNames.contains(n)) d.createObjectStore(n); }); };
+    r.onsuccess=()=>{ IDB.db=r.result; res(r.result); }; r.onerror=()=>rej(r.error); }); },
+  run(store, mode, fn){ return new Promise((res,rej)=>{ const t=IDB.db.transaction(store,mode), req=fn(t.objectStore(store));
+    t.oncomplete=()=>res(req&&'result' in req?req.result:undefined); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error); }); },
+  get:(st,k)=>IDB.run(st,'readonly',s=>s.get(k)),
+  put:(st,k,v)=>IDB.run(st,'readwrite',s=>s.put(v,k)),
+  del:(st,k)=>IDB.run(st,'readwrite',s=>s.delete(k)),
+  all(st){ return new Promise((res,rej)=>{ const out=[], t=IDB.db.transaction(st,'readonly'), c=t.objectStore(st).openCursor();
+    c.onsuccess=()=>{ const cur=c.result; if(cur){ out.push([cur.key,cur.value]); cur.continue(); } };
+    t.oncomplete=()=>res(out); t.onerror=()=>rej(t.error); }); }
+};
+const flatQ = q => q.flatMap(p=>[Math.round(p[0]*10)/10, Math.round(p[1]*10)/10]);
+const unflatQ = a => [[a[0],a[1]],[a[2],a[3]],[a[4],a[5]],[a[6],a[7]]];
+const serShot = s => ({asset:s.asset, w:s.w, h:s.h, quad:flatQ(s.quad)});
+function ready(it){ return it.front.length && it.front.every(s=>s.asset) && (!it.back || it.back.asset); }
+let warnedStore=false;
+function storeFailed(){ if(warnedStore) return; warnedStore=true; toast('Your phone’s storage for Shoebox is full. Save and clear some scans; new ones stay only until you close the app.'); }
+function persist(it){
+  if(!kept || it.example) return;
+  clearTimeout(pend.get(it.id));
+  pend.set(it.id, setTimeout(()=>{
+    pend.delete(it.id);
+    if(!ready(it) || !items.includes(it)) return;
+    const doc={kind:'scan', n:it.n, created:it.created, front:it.front.map(serShot), back:it.back?serShot(it.back):null,
+      rot:it.rot, backRot:it.backRot, who:it.who, when:it.when, note:it.note, backText:it.backText, saved:it.saved, thumb:it.thumb||''};
+    IDB.put('scans', it.id, doc).catch(storeFailed);
+  }, 400));
+}
+let setT=0;
+function persistSettings(){ clearTimeout(setT); setT=setTimeout(()=>{ if(kept) IDB.put('meta','settings',{...S}).catch(()=>{}); }, 300); }
+async function upload(shot, it){
+  if(!kept || !shot.file || shot.asset) return;
+  const id='b'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  try{ await IDB.put('blobs', id, shot.file); shot.asset=id; delete shot.file; persist(it); render(); }
+  catch(e){ storeFailed(); }
+}
+function forget(it){
+  if(kept && !it.example){ IDB.del('scans', it.id).catch(()=>{}); [...it.front, it.back].forEach(s=>{ if(s&&s.asset) IDB.del('blobs', s.asset).catch(()=>{}); }); }
+  [...it.front, it.back].forEach(s=>{ if(s&&s.url&&s.url.startsWith('blob:')) URL.revokeObjectURL(s.url); });
+  const i=items.indexOf(it); if(i>=0) items.splice(i,1);
+}
+
+/* ---------- shots and scans ---------- */
+async function makeShot(file){
+  const url=URL.createObjectURL(file), img=await loadImage(url), small=downscale(img,900);
+  const shot={file,url,asset:null,w:img.naturalWidth,h:img.naturalHeight,quad:detectQuad(small)||insetQuad(img.naturalWidth,img.naturalHeight)};
+  return {shot, small};
+}
+function newItem(front){
+  S.last=(+S.last||0)+1; persistSettings();
+  return {id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), n:S.last, created:new Date().toISOString(),
+    front:[front], back:null, rot:0, backRot:0, who:'', when:'', note:'', backText:'', thumb:'', saved:false, sel:false};
+}
+async function refreshThumb(it){
+  try{
+    const imgs=[]; for(const s of it.front) imgs.push(await loadImage(s.url));
+    const sm=imgs.map(i=>downscale(i,700)); const low=mergeLow(sm,it.front,it.rot,300); sm.forEach(s=>s.canvas.width=1);
+    const c=document.createElement('canvas'); c.width=low.w; c.height=low.h; c.getContext('2d').putImageData(new ImageData(low.data,low.w,low.h),0,0);
+    it.thumb=c.toDataURL('image/jpeg',.75); c.width=1;
+  }catch(e){ it.error=true; }
+}
+async function addItem(it){
+  for(let i=items.length-1;i>=0;i--) if(items[i].example) forget(items[i]);
+  items.push(it); await refreshThumb(it); render();
+  for(const s of [...it.front, it.back]) if(s) upload(s, it);
+  persist(it);
+  if(S.aiRot && sample) autoRotate([it], true);
+  if(S.aiBack && sample && it.back) readBack(it);
+}
+
+/* ---------- home ---------- */
+function greeting(){
+  const d=new Date(), h=d.getHours();
+  return d.toLocaleDateString('en-US',{weekday:'long'})+' '+(h<12?'morning':h<17?'afternoon':'evening');
+}
+const real = () => items.filter(i=>!i.example);
+const needsNames = i => !(i.who||'').trim() && !(i.note||'').trim();
+function visible(){
+  if(filter==='save') return items.filter(i=>!i.saved);
+  if(filter==='names') return items.filter(needsNames);
+  return items;
+}
+function render(){
+  $('greet').textContent=greeting();
+  const r=real(), saved=r.filter(i=>i.saved).length, unsaved=r.length-saved;
+  $('heroAlbum').textContent=(S.album||'').trim()||'Shoebox';
+  $('heroBig').textContent=r.length? `${saved} of ${r.length} saved` : 'Ready to scan';
+  $('heroProg').style.width=(r.length?100*saved/r.length:0)+'%';
+  const th=items.filter(i=>i.thumb).slice(-2);
+  $('miniA').style.backgroundImage=th.length>1?`url("${th[0].thumb}")`:'';
+  $('miniB').style.backgroundImage=th.length?`url("${th[th.length-1].thumb}")`:'';
+  $('selectBtn').hidden=!r.length; $('selectBtn').textContent=selecting?'Done':'Select';
+  $('hero').hidden=selecting; $('batch').hidden=!selecting;
+  $('chips').hidden=!items.length;
+  const counts={all:items.length, save:items.filter(i=>!i.saved).length, names:items.filter(needsNames).length};
+  document.querySelectorAll('#chips .chip').forEach(b=>{ const f=b.dataset.f; b.setAttribute('aria-pressed', String(filter===f));
+    b.textContent=({all:'All',save:'To save',names:'Needs names'})[f]+' '+counts[f]; });
+  const g=$('grid'); g.innerHTML='';
+  const list=visible();
+  if(items.length && !list.length){ const p=document.createElement('p'); p.className='empty'; p.style.gridColumn='1/-1';
+    p.textContent=filter==='save'?'Everything here is saved.':'Every scan has names or notes.'; g.appendChild(p); }
+  for(const it of list){
+    const b=document.createElement('button'); b.type='button'; b.className='tile'+(selecting&&it.sel?' on':'');
+    if(it.thumb){ const im=document.createElement('img'); im.src=it.thumb; im.alt=''; b.appendChild(im); }
+    else { const s=document.createElement('span'); s.className='busy'; s.textContent=it.error?'Couldn’t read this photo':'Finding edges…'; b.appendChild(s); }
+    const yr=document.createElement('span'); yr.className='yr'; const p=parseWhen(it.when);
+    yr.textContent=it.example?'Example':p?String(p.y):'No. '+pad(it.n,3); b.appendChild(yr);
+    if(selecting){ const s=document.createElement('span'); s.className='sel'; s.innerHTML=it.sel?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>':''; b.appendChild(s); }
+    else if(it.saved){ const s=document.createElement('span'); s.className='ok'; s.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>'; b.appendChild(s); }
+    else if(kept && !it.example && !ready(it)){ const s=document.createElement('span'); s.className='up'; s.title='Storing on this phone'; b.appendChild(s); }
+    b.setAttribute('aria-label', `Scan ${it.n}${it.example?' (example)':''}. ${caption(it)||'No names yet'}${it.saved?', saved':''}${selecting?(it.sel?', selected':', not selected'):''}`);
+    b.onclick=()=>{ if(it.error){ forget(it); render(); return; } if(selecting){ if(it.example) return; it.sel=!it.sel; render(); } else openEditor(it); };
+    g.appendChild(b);
+  }
+  $('emptyCard').hidden=items.length>0;
+  $('selCount').textContent=items.filter(i=>i.sel).length+' selected';
+  const dock=$('dock');
+  dock.hidden = selecting || (!unsaved && !saving);
+  if(saving){ $('saveAllTxt').textContent=`Saving ${saving.done} of ${saving.total}`; }
+  else $('saveAllTxt').textContent=`Save ${unsaved} to Photos`;
+}
+document.querySelectorAll('#chips .chip').forEach(b=>b.onclick=()=>{ filter=b.dataset.f; render(); });
+
+$('camIn').addEventListener('change', async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return; await startFlow(f); });
+$('libIn').addEventListener('change', async e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length) return;
+  toast(`Adding ${fs.length} photo${fs.length>1?'s':''}…`);
+  for(const f of fs){ try{ const {shot,small}=await makeShot(f); small.canvas.width=1; await addItem(newItem(shot)); }catch(_){ toast('One photo couldn’t be read.'); } }
+});
+
+/* ---------- capture flow: next print, glare shots, back ---------- */
+async function startFlow(file){
+  flow={it:null, count:0, small:null};
+  $('camSheet').hidden=false; document.body.style.overflow='hidden';
+  await flowShot(file);
+}
+function flowStep(){
+  if(!flow.it) return {kind:'next'};
+  if(flow.it.front.length < S.shots && !flow.glareDone) return {kind:'glare', k:flow.it.front.length};
+  return {kind:'back'};
+}
+async function flowShot(file){
+  let made; try{ made=await makeShot(file); }catch(_){ toast('That photo couldn’t be read. Try again.'); renderFlow(); return; }
+  if(flow.small) flow.small.canvas.width=1;
+  flow.small=made.small; flow.lastShot=made.shot;
+  const st=flowStep();
+  if(st.kind==='next'){ flow.it=newItem(made.shot); flow.glareDone=false; }
+  else if(st.kind==='glare'){ flow.it.front.push(made.shot); }
+  else { flow.it.back=made.shot; }
+  UIImpactFeedback();
+  const next=flowStep();
+  if(next.kind==='back' && !S.backs) finishPrint();
+  else if(next.kind==='back' && flow.it.back) finishPrint();
+  renderFlow();
+}
+function UIImpactFeedback(){ try{ navigator.vibrate&&navigator.vibrate(15); }catch(_){} }
+function finishPrint(){ if(!flow.it) return; addItem(flow.it); flow.it=null; flow.count++; }
+function renderFlow(){
+  const st=flowStep(), total=S.shots+(S.backs?1:0);
+  const done = !flow.it ? 0 : flow.it.front.length + (flow.it.back?1:0);
+  $('camCount').textContent=`${flow.count} scanned`;
+  const bars=$('camBars'); bars.innerHTML=''; bars.hidden=total<2;
+  for(let i=0;i<total;i++){ const s=document.createElement('span'); if(i<(st.kind==='next'?0:done)) s.className='on'; bars.appendChild(s); }
+  if(st.kind==='next'){
+    $('camTitle').textContent=flow.count?'Ready for the next print':'Lay a print on a dark surface';
+    $('camSub').textContent=flow.count?'Tap the blue button to scan it':'';
+    $('camTip').textContent='Hold the phone flat over the print, flash off. The last scan is shown above.';
+    $('camSkip').hidden=true;
+  } else if(st.kind==='glare'){
+    $('camTitle').textContent='Tilt a little, then take the next shot';
+    $('camSub').textContent=`Glare shot ${st.k+1} of ${S.shots}`+(S.backs&&st.k+1===S.shots?' · back next':'');
+    $('camTip').textContent='Change the angle or move the light so the glare lands somewhere else.';
+    $('camSkip').hidden=false; $('camSkip').textContent='Done with glare shots';
+  } else {
+    $('camTitle').textContent='Flip the print over';
+    $('camSub').textContent='Back of the print';
+    $('camTip').textContent='Writing on the back can fill in names and dates.';
+    $('camSkip').hidden=false; $('camSkip').textContent='Skip the back';
+  }
+  drawFlowPreview();
+}
+function drawFlowPreview(){
+  const c=$('camPrev'), x=c.getContext('2d'), sm=flow.small, sh=flow.lastShot;
+  if(!sm||!sh){ c.width=1; c.height=1; return; }
+  c.width=sm.w; c.height=sm.h; x.drawImage(sm.canvas,0,0);
+  const q=sh.quad.map(([a,b])=>[a*sm.s,b*sm.s]);
+  x.save(); x.beginPath(); x.rect(0,0,c.width,c.height); x.moveTo(...q[0]); q.slice(1).forEach(p=>x.lineTo(...p)); x.closePath();
+  x.fillStyle='rgba(16,20,42,.4)'; x.fill('evenodd'); x.restore();
+  x.lineJoin='round'; x.lineWidth=Math.max(3,c.width/150); x.strokeStyle='#4ADE9B';
+  x.beginPath(); x.moveTo(...q[0]); q.slice(1).forEach(p=>x.lineTo(...p)); x.closePath(); x.stroke();
+}
+for(const id of ['camNext','camLib']) $(id).addEventListener('change', async e=>{ const f=e.target.files[0]; e.target.value=''; if(f&&flow) await flowShot(f); });
+$('camSkip').onclick=()=>{ if(!flow||!flow.it) return; const st=flowStep();
+  if(st.kind==='glare'){ flow.glareDone=true; if(!S.backs) finishPrint(); }
+  else finishPrint();
+  renderFlow(); };
+$('camDone').onclick=()=>{ if(flow){ finishPrint(); if(flow.small) flow.small.canvas.width=1; } flow=null; $('camSheet').hidden=true; document.body.style.overflow=''; render(); };
+
+/* ---------- batch tools ---------- */
+$('selectBtn').onclick=()=>{ selecting=!selecting; items.forEach(i=>i.sel=false); $('bDelConfirm').hidden=true; render(); };
+$('selAll').onclick=()=>{ const all=visible().filter(i=>!i.example&&!i.error); const on=!all.every(i=>i.sel); all.forEach(i=>i.sel=on); render(); };
+const selected=()=>items.filter(i=>i.sel&&!i.example&&!i.error);
+$('bApply').onclick=()=>{ const s=selected(); if(!s.length) return toast('Select scans first.');
+  const v={who:$('bWho').value.trim(), when:$('bWhen').value.trim(), note:$('bNote').value.trim()};
+  if(!v.who&&!v.when&&!v.note) return toast('Type at least one label to apply.');
+  s.forEach(it=>{ for(const k in v) if(v[k]) it[k]=v[k]; it.saved=false; persist(it); }); render(); toast(`Labeled ${s.length} scan${s.length>1?'s':''}.`); };
+async function rotateMany(list, turns){ for(const it of list){ it.rot=(it.rot+turns)%4; it.saved=false; await refreshThumb(it); persist(it); render(); } }
+$('bRotL').onclick=()=>{ const s=selected(); if(!s.length) return toast('Select scans first.'); rotateMany(s,1); };
+$('bRotR').onclick=()=>{ const s=selected(); if(!s.length) return toast('Select scans first.'); rotateMany(s,3); };
+$('bDel').onclick=()=>{ const s=selected(); if(!s.length) return toast('Select scans first.'); $('bDelN').textContent=s.length; $('bDelConfirm').hidden=false; };
+$('bDelNo').onclick=()=>{ $('bDelConfirm').hidden=true; };
+$('bDelYes').onclick=()=>{ const s=selected(); s.forEach(forget); $('bDelConfirm').hidden=true; selecting=false; render(); toast(`Deleted ${s.length} scan${s.length>1?'s':''}.`); };
+
+function sampleError(e){ const c=e&&e.code;
+  if(c==='not_granted'||c==='sampling_disabled'||c==='images_unavailable'||c==='capability_disabled'){ sample=null; updateAiUi(); return 'Claude isn’t allowed for this page, so that feature is off.'; }
+  if(c==='rate_limited') return 'Claude is busy right now. Try again in a minute.';
+  if(c==='cancelled') return ''; return 'Claude couldn’t read that. Try again.'; }
+async function previewBlob(shots, rot, side){ const imgs=[]; for(const s of shots) imgs.push(await loadImage(s.url));
+  const sm=imgs.map(i=>downscale(i,side+200)); const low=mergeLow(sm,shots,rot,side); sm.forEach(s=>s.canvas.width=1);
+  const c=document.createElement('canvas'); c.width=low.w; c.height=low.h; c.getContext('2d').putImageData(new ImageData(low.data,low.w,low.h),0,0);
+  const b=await new Promise(r=>c.toBlob(r,'image/jpeg',.85)); c.width=1; return b; }
+async function autoRotate(list, quiet){
+  if(!sample || !list.length) return; let changed=0;
+  try{ for(let i=0;i<list.length;i+=sampleMax){ const chunk=list.slice(i,i+sampleMax);
+      const blobs=[]; for(const it of chunk) blobs.push(await previewBlob([it.front[0]], it.rot, 600));
+      const ans=await sample.json(`You are looking at ${chunk.length} scanned printed photograph${chunk.length>1?'s':''}, in order. For each one, decide how many degrees it must be rotated CLOCKWISE so it is upright (people standing upright, horizons level at the bottom, any printed text readable). Reply with only a JSON array of ${chunk.length} integer${chunk.length>1?'s':''}, each 0, 90, 180 or 270, in the same order. Example for three photos: [0,90,0]`, {images:blobs});
+      if(Array.isArray(ans)) for(let k=0;k<chunk.length;k++){ const it=chunk[k], t={90:3,180:2,270:1}[Number(ans[k])]; if(t){ it.rot=(it.rot+t)%4; it.saved=false; changed++; await refreshThumb(it); persist(it); } }
+      render(); }
+    if(!quiet) toast(changed?`Turned ${changed} scan${changed>1?'s':''} upright.`:'Those scans were already upright.');
+  }catch(e){ const m=sampleError(e); if(m&&!quiet) toast(m); }
+}
+$('bAuto').onclick=async()=>{ const s=selected(); if(!s.length) return toast('Select scans first.'); const b=$('bAuto'); b.disabled=true; b.textContent='Asking Claude…'; await autoRotate(s,false); b.disabled=false; b.textContent='Upright with Claude'; };
+function updateAiUi(){ $('bAuto').hidden=!sample; $('aiCard').hidden=!sample; if(current) $('readBackBtn').hidden=!(sample&&current.back); }
+
+async function readBack(it){
+  if(!sample||!it.back) return null;
+  const blob=await previewBlob([it.back], it.backRot, 1100);
+  const r=await sample.json('This image is the BACK of a printed family photograph. Transcribe all handwriting and printed text exactly as written (including photo-lab date stamps). Then pull out: who (names of the people pictured, as written), when (the date or year, written like 1962 or 7/4/1962, or "" if none), and place (location or event). Reply with only JSON: {"transcription": string, "who": string, "when": string, "place": string}. Use "" for anything not on the back.', {images:blob});
+  const fill=(k,v)=>{ v=String(v||'').trim(); if(v&&!(it[k]||'').trim()) it[k]=v; };
+  fill('backText',r&&r.transcription); fill('who',r&&r.who); fill('when',r&&r.when); fill('note',r&&r.place);
+  it.saved=false; persist(it); render(); return r;
+}
+
+/* ---------- editor ---------- */
+const cv=$('edCanvas'), cx=cv.getContext('2d');
+const activeShot=()=>ed.tab==='back'?current.back:current.front[ed.tab];
+const activeRot=()=>ed.tab==='back'?current.backRot:current.rot;
+const activeSmall=()=>ed.tab==='back'?ed.backSmall:ed.smalls[ed.tab];
+function changed(){ current.saved=false; persist(current); }
+function setRot(r){ if(ed.tab==='back') current.backRot=r; else current.rot=r; changed(); }
+async function openEditor(it){
+  current=it; $('fullWrap').hidden=true; $('readNote').textContent=''; $('removeConfirm').hidden=true;
+  $('edTitle').textContent=it.example?'Example':'No. '+pad(it.n,3);
+  $('whoIn').value=it.who; $('whenIn').value=it.when; $('noteIn').value=it.note; $('backIn').value=it.backText||'';
+  $('edSheet').hidden=false; $('edSheet').scrollTop=0; document.body.style.overflow='hidden'; $('prevRestore').checked=false;
+  ed={tab:0, smalls:[], backSmall:null, img:null, drag:-1};
+  try{
+    for(const s of it.front) ed.smalls.push(downscale(await loadImage(s.url),1200));
+    if(it.back) ed.backSmall=downscale(await loadImage(it.back.url),1200);
+  }catch(e){ toast('This scan’s photo couldn’t be loaded.'); return closeEditor(); }
+  await selectTab(0);
+}
+async function selectTab(t){ ed.tab=t; ed.img=await loadImage(activeShot().url); const sm=activeSmall(); cv.width=sm.w; cv.height=sm.h; renderTabs(); drawEditor(); updatePreview(); updateEditorText(); }
+function renderTabs(){
+  const box=$('edTabs'); box.innerHTML='';
+  const chip=(label,on,fn)=>{ const b=document.createElement('button'); b.type='button'; b.className='chip'; b.setAttribute('aria-pressed',String(on)); b.textContent=label; b.onclick=fn; box.appendChild(b); };
+  const adder=(label,aria,fn)=>{ const l=document.createElement('label'); l.className='chip add'; l.textContent=label;
+    const i=document.createElement('input'); i.type='file'; i.accept='image/*'; i.setAttribute('aria-label',aria);
+    i.onchange=e=>{ const f=e.target.files[0]; e.target.value=''; if(f) fn(f); }; l.appendChild(i); box.appendChild(l); };
+  current.front.forEach((s,i)=>chip(current.front.length>1?`Front ${i+1}`:'Front', ed.tab===i, ()=>selectTab(i)));
+  if(current.front.length<4) adder('+ Glare shot','Add another shot of the front to remove glare', f=>addShotToCurrent(f,'front'));
+  if(current.back) chip('Back', ed.tab==='back', ()=>selectTab('back'));
+  else adder('+ Back','Add a photo of the back of the print', f=>addShotToCurrent(f,'back'));
+  const glare=current.front.length>1;
+  $('edNote').textContent = ed.tab==='back' ? 'The back of the print. It saves as its own photo next to the front.'
+    : glare ? `Glare removal is on: ${current.front.length} shots are combined. Fit the corners on each shot so they line up.` : 'Drag the corners onto the edges of the print. The thick edge becomes the top.';
+  $('dropShotBtn').hidden = !(ed.tab==='back' || ed.tab>0);
+  $('backBox').hidden=!current.back; $('restoreRow').hidden=ed.tab==='back'; updateAiUi();
+}
+async function addShotToCurrent(f, kind){
+  const it=current;
+  try{ const {shot,small}=await makeShot(f); small.canvas.width=1; const sm=downscale(await loadImage(shot.url),1200);
+    if(kind==='back'){ if(it.back) forgetShot(it.back); it.back=shot; ed.backSmall=sm; } else { it.front.push(shot); ed.smalls.push(sm); }
+    upload(shot, it); changed();
+  }catch(e){ return toast('Couldn’t read that photo.'); }
+  if(current!==it) return;
+  await selectTab(kind==='back'?'back':it.front.length-1);
+  if(kind==='front'&&it.front.length===2) toast('Glare removal is on. Another shot from a different angle helps more.');
+  if(kind==='back'&&S.aiBack&&sample) $('readBackBtn').click();
+}
+function forgetShot(s){ if(kept&&s.asset&&!current.example) IDB.del('blobs', s.asset).catch(()=>{}); if(s.url&&s.url.startsWith('blob:')) URL.revokeObjectURL(s.url); }
+$('dropShotBtn').onclick=async()=>{ const it=current;
+  if(ed.tab==='back'){ forgetShot(it.back); it.back=null; ed.backSmall=null; }
+  else { const i=ed.tab; forgetShot(it.front[i]); it.front.splice(i,1); ed.smalls.splice(i,1); }
+  changed(); await selectTab(0); };
+function closeEditor(){ if(!current) return; const it=current;
+  if(ed){ if(ed.smalls.length){ const low=mergeLow(ed.smalls,it.front,it.rot,300); const c=document.createElement('canvas'); c.width=low.w; c.height=low.h; c.getContext('2d').putImageData(new ImageData(low.data,low.w,low.h),0,0); it.thumb=c.toDataURL('image/jpeg',.75); c.width=1; }
+    ed.smalls.forEach(s=>s.canvas.width=1); if(ed.backSmall) ed.backSmall.canvas.width=1; }
+  if(!it.example) persist(it);
+  ed=null; current=null; $('edSheet').hidden=true; document.body.style.overflow=''; $('fullImg').removeAttribute('src'); render(); }
+function drawEditor(){
+  if(!ed||!ed.img) return; const sm=activeSmall(), s=sm.s, shot=activeShot(), rot=activeRot(), q=shot.quad.map(([x,y])=>[x*s,y*s]);
+  const scale=cv.width/(cv.getBoundingClientRect().width||cv.width);
+  cx.drawImage(sm.canvas,0,0);
+  cx.save(); cx.beginPath(); cx.rect(0,0,cv.width,cv.height); cx.moveTo(...q[0]); q.slice(1).forEach(p=>cx.lineTo(...p)); cx.closePath();
+  cx.fillStyle='rgba(16,20,42,.5)'; cx.fill('evenodd'); cx.restore();
+  const acc='#4ADE9B';
+  cx.lineJoin='round'; cx.lineWidth=2.5*scale; cx.strokeStyle=acc; cx.beginPath(); cx.moveTo(...q[0]); q.slice(1).forEach(p=>cx.lineTo(...p)); cx.closePath(); cx.stroke();
+  const t0=q[rot%4], t1=q[(rot+1)%4]; cx.lineWidth=7*scale; cx.beginPath(); cx.moveTo(...t0); cx.lineTo(...t1); cx.stroke();
+  q.forEach((p,i)=>{ cx.beginPath(); cx.arc(p[0],p[1],(ed.drag===i?17:13)*scale,0,Math.PI*2); cx.fillStyle='#fff'; cx.fill(); cx.lineWidth=3.5*scale; cx.strokeStyle='#2B50D8'; cx.stroke(); });
+  if(ed.drag>=0){ const p=shot.quad[ed.drag], R=70*scale, zoom=4, srcR=R/zoom/s;
+    const lx = p[0]*s < cv.width/2 ? cv.width-R-12*scale : R+12*scale, ly=R+12*scale;
+    cx.save(); cx.beginPath(); cx.arc(lx,ly,R,0,Math.PI*2); cx.clip();
+    cx.drawImage(ed.img,p[0]-srcR,p[1]-srcR,srcR*2,srcR*2,lx-R,ly-R,R*2,R*2);
+    cx.strokeStyle='#fff'; cx.lineWidth=1.5*scale; cx.beginPath(); cx.moveTo(lx-12*scale,ly); cx.lineTo(lx+12*scale,ly); cx.moveTo(lx,ly-12*scale); cx.lineTo(lx,ly+12*scale); cx.stroke();
+    cx.restore(); cx.beginPath(); cx.arc(lx,ly,R,0,Math.PI*2); cx.lineWidth=4*scale; cx.strokeStyle='#2B50D8'; cx.stroke(); }
+}
+let pvRaf=0;
+function updatePreview(){ cancelAnimationFrame(pvRaf); pvRaf=requestAnimationFrame(()=>{ if(!ed) return;
+  const low = ed.tab==='back' ? mergeLow([ed.backSmall],[current.back],current.backRot,440) : mergeLow(ed.smalls,current.front,current.rot,440);
+  $('edPrev').src=toDataURL(low.data,low.w,low.h,$('prevRestore').checked&&ed.tab!=='back'); updateEditorText(); }); }
+$('prevRestore').addEventListener('change',updatePreview);
+function updateEditorText(){ if(!current||!ed) return;
+  if(ed.tab==='back'){ const {W,H}=geometry(current.back.quad,current.backRot); $('edDpi').className='dpi'; $('edDpi').textContent='Back'; $('edDpiNote').textContent=`${W.toLocaleString()} × ${H.toLocaleString()} px`; }
+  else { const {W,H}=geometry(current.front[0].quad,current.rot), d=dpiOf(current);
+    $('edDpi').className='dpi '+dpiClass(d); $('edDpi').textContent=d+' dpi';
+    $('edDpiNote').textContent=`${W.toLocaleString()} × ${H.toLocaleString()} px · `+(d>=300?'great for video':d>=200?'fine for video; closer is better':'low, move the phone closer'); }
+  const b=baseName(current), names=[b+ext()]; if(S.restore) names.push(b+'_restored'+ext()); if(current.back) names.push(b+'_back'+ext());
+  $('edName').textContent='Saves as '+names.join(', '); }
+function canvasPt(e){ const r=cv.getBoundingClientRect(), s=activeSmall().s; return [(e.clientX-r.left)*cv.width/r.width/s, (e.clientY-r.top)*cv.height/r.height/s]; }
+cv.addEventListener('pointerdown',e=>{ if(!ed) return; const p=canvasPt(e), r=cv.getBoundingClientRect(), tol=44*(cv.width/r.width)/activeSmall().s, q=activeShot().quad;
+  let bi=-1,bd=Infinity; q.forEach((c,i)=>{const d=dlen(c,p); if(d<bd){bd=d;bi=i;}});
+  if(bd<=tol){ ed.drag=bi; ed.off=[q[bi][0]-p[0],q[bi][1]-p[1]]; cv.setPointerCapture(e.pointerId); drawEditor(); e.preventDefault(); } });
+cv.addEventListener('pointermove',e=>{ if(!ed||ed.drag<0) return; const p=canvasPt(e), sh=activeShot();
+  sh.quad[ed.drag]=[Math.max(0,Math.min(sh.w,p[0]+ed.off[0])),Math.max(0,Math.min(sh.h,p[1]+ed.off[1]))]; drawEditor(); updatePreview(); });
+const endDrag=()=>{ if(ed&&ed.drag>=0){ ed.drag=-1; changed(); drawEditor(); } };
+cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',endDrag);
+window.addEventListener('resize',()=>drawEditor());
+$('rotL').onclick=()=>{ setRot((activeRot()+1)%4); drawEditor(); updatePreview(); };
+$('rotR').onclick=()=>{ setRot((activeRot()+3)%4); drawEditor(); updatePreview(); };
+$('autoBtn').onclick=()=>{ const sh=activeShot(), q=detectQuad(downscale(ed.img,900)); if(q){ sh.quad=q; changed(); drawEditor(); updatePreview(); } else toast('No clear print edge found. Try a darker background, or drag the corners.'); };
+$('fullBtn').onclick=()=>{ const sh=activeShot(); sh.quad=fullQuad(sh.w,sh.h); changed(); drawEditor(); updatePreview(); };
+[['whoIn','who'],['whenIn','when'],['noteIn','note'],['backIn','backText']].forEach(([id,k])=>$(id).addEventListener('input',e=>{ if(current){ current[k]=e.target.value; changed(); updateEditorText(); } }));
+$('readBackBtn').onclick=async()=>{ if(!sample||!current||!current.back) return; const it=current, btn=$('readBackBtn');
+  btn.disabled=true; $('readNote').textContent='Reading the handwriting…';
+  try{ const r=await readBack(it);
+    if(current===it){ $('whoIn').value=it.who; $('whenIn').value=it.when; $('noteIn').value=it.note; $('backIn').value=it.backText; updateEditorText();
+      $('readNote').textContent=r&&r.transcription?'Done. Check the names and dates.':'No writing found.'; }
+  }catch(e){ $('readNote').textContent=sampleError(e); }
+  btn.disabled=false; };
+$('edDone').onclick=closeEditor;
+document.addEventListener('keydown',e=>{ if(e.key!=='Escape') return; if(current) closeEditor(); else if(!$('setSheet').hidden) closeSettings(); else if(!$('saveSheet').hidden&&!saving) $('saveSheet').hidden=true; });
+$('removeBtn').onclick=()=>{ $('removeConfirm').hidden=false; };
+$('removeNo').onclick=()=>{ $('removeConfirm').hidden=true; };
+$('removeYes').onclick=()=>{ const it=current; closeEditor(); forget(it); render(); };
+$('viewFullBtn').onclick=async()=>{ const b=$('viewFullBtn'); b.disabled=true; b.textContent='Rendering…';
+  try{ const back=ed.tab==='back', r=back?await renderSide([current.back],current.backRot):await renderSide(current.front,current.rot,{restore:$('prevRestore').checked});
+    const blob=r.restored||r.blob; $('fullImg').src=URL.createObjectURL(blob);
+    $('fullNote').textContent=`${back?'Back, ':''}${r.W.toLocaleString()} × ${r.H.toLocaleString()} px, ${(r.blob.size/1048576).toFixed(1)} MB. Pinch to zoom and check sharpness.`; $('fullWrap').hidden=false; }
+  catch(e){ toast('That photo was too large to render here. Close other apps and try again.'); }
+  b.disabled=false; b.textContent='Check full size'; };
+
+/* ---------- saving: the share sheet's "Save Images" puts a whole batch into Photos ---------- */
+const asFile = f => new File([f.blob], f.name, {type:f.blob.type||'image/jpeg'});
+function canShareFiles(files){ try{ return !!(navigator.canShare && navigator.canShare({files})); }catch(_){ return false; } }
+function downloadBlob(name, blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 5000); }
+let pendingShare=null;
+// Sharing must start from a tap, so each prepared batch waits for the Save button.
+function waitForTap(files, label){
+  return new Promise((resolve,reject)=>{
+    pendingShare={files, resolve, reject};
+    const go=$('saveGo'); go.textContent=label; go.hidden=false; go.focus();
+  });
+}
+$('saveGo').onclick=()=>{
+  const p=pendingShare; if(!p) return; pendingShare=null; $('saveGo').hidden=true;
+  const files=p.files.map(asFile);
+  if(canShareFiles(files)) navigator.share({files}).then(p.resolve, e=>p.reject(e&&e.name==='AbortError'?{code:'declined'}:e));
+  else { p.files.forEach(f=>downloadBlob(f.name,f.blob)); p.resolve(); }
+};
+function saveError(e){ const c=e&&e.code; if(c==='declined') return 'Save cancelled.'; if(c==='nozip') return 'The zip tool didn’t load. Save to Photos instead.';
+  return 'Couldn’t save. Close other apps and try again.'; }
+function saveUi(txt, frac){ $('saveProgress').hidden=false; $('saveStatus').textContent=txt; $('saveBar').style.width=Math.round(100*frac)+'%'; render(); }
+function openSave(list){
+  const n=list.length; saveList=list;
+  $('saveTitle').textContent=`Save ${n} scan${n>1?'s':''}`; $('saveProgress').hidden=true; $('saveGo').hidden=true;
+  $('saveEach').disabled=false; $('saveZip').disabled=false; $('saveOpts').hidden=false; $('saveSheet').hidden=false; document.body.style.overflow='hidden';
+}
+let saveList=[];
+$('saveOneBtn').onclick=()=>{ const it=current; if(it.example) return toast('This is a sample. Scan your own prints to save them.'); closeEditor(); openSave([it]); };
+$('saveAllBtn').onclick=()=>{ if(saving){ $('saveSheet').hidden=false; return; } const l=real().filter(i=>!i.saved); if(l.length) openSave(l); };
+$('saveClose').onclick=()=>{ if(saving) saving.stop=true; if(pendingShare){ pendingShare.reject({code:'declined'}); pendingShare=null; } $('saveSheet').hidden=true; document.body.style.overflow=''; };
+$('saveStop').onclick=()=>{ if(saving) saving.stop=true; if(pendingShare){ pendingShare.reject({code:'declined'}); pendingShare=null; $('saveGo').hidden=true; } };
+const PER_SHARE=6;
+$('saveEach').onclick=async()=>{
+  const todo=saveList.filter(i=>!i.saved); if(!todo.length) return;
+  saving={done:0,total:todo.length,stop:false}; $('saveOpts').hidden=true;
+  let msg='';
+  try{ for(let i=0;i<todo.length && !saving.stop;i+=PER_SHARE){ const group=todo.slice(i,i+PER_SHARE), files=[];
+      for(const it of group){ saveUi(`Preparing scan ${saving.done+group.indexOf(it)+1} of ${todo.length}…`, (saving.done+group.indexOf(it))/todo.length);
+        (await buildFiles(it)).forEach(f=>files.push(f)); }
+      saveUi(`Ready: ${group.length} scan${group.length>1?'s':''} (${files.length} photo${files.length>1?'s':''})`, saving.done/todo.length);
+      await waitForTap(files, `Save ${files.length} photo${files.length>1?'s':''} to Photos`);
+      group.forEach(it=>{ it.saved=true; persist(it); }); saving.done+=group.length; }
+    msg=saving.stop?`Stopped. ${saving.done} saved.`:`Saved ${saving.done} scan${saving.done>1?'s':''}.`;
+  }catch(e){ msg=(e&&e.code==='declined')?`Stopped. ${saving.done} saved.`:saveError(e); }
+  saving=null; $('saveSheet').hidden=true; document.body.style.overflow=''; render(); toast(msg);
+};
+$('saveZip').onclick=async()=>{
+  if(typeof JSZip==='undefined') return toast(saveError({code:'nozip'}));
+  const todo=saveList.filter(i=>!i.saved); if(!todo.length) return;
+  const BATCH=15, folder=slug(S.album)||'family-photos', parts=Math.ceil(todo.length/BATCH);
+  saving={done:0,total:todo.length,stop:false}; $('saveOpts').hidden=true;
+  let msg='';
+  try{ for(let p=0;p<parts&&!saving.stop;p++){ const group=todo.slice(p*BATCH,(p+1)*BATCH), z=new JSZip(), dir=z.folder(folder);
+      for(const it of group){ saveUi(`Preparing scan ${saving.done+1} of ${todo.length}…`, saving.done/todo.length);
+        const files=await buildFiles(it); files.forEach(f=>dir.file(f.name,f.blob)); saving.done++; }
+      saveUi('Packing the zip…', saving.done/todo.length);
+      const zb=await z.generateAsync({type:'blob',compression:'STORE'});
+      const name=`${folder}${parts>1?'_part-'+(p+1):''}.zip`;
+      await waitForTap([{name, blob:new Blob([zb],{type:'application/zip'})}], parts>1?`Save zip ${p+1} of ${parts}`:'Save the zip');
+      group.forEach(it=>{ it.saved=true; persist(it); }); }
+    msg=saving.stop?'Stopped.':'Saved. Find the zip in the Files app.';
+  }catch(e){ msg=(e&&e.code==='declined')?'Save cancelled.':saveError(e); }
+  saving=null; $('saveSheet').hidden=true; document.body.style.overflow=''; render(); toast(msg);
+};
+
+/* ---------- settings ---------- */
+function openSettings(){
+  $('albumIn').value=S.album; $('backsIn').checked=!!S.backs; $('sizeIn').value=String(S.size); $('restoreIn').checked=!!S.restore; $('fmtIn').value=S.fmt;
+  $('aiRotIn').checked=!!S.aiRot; $('aiBackIn').checked=!!S.aiBack; $('clearConfirm').hidden=true;
+  document.querySelectorAll('#shotsSeg button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.v===+S.shots)));
+  const n=real().filter(i=>i.saved).length; $('clearBtn').disabled=!n;
+  $('usageNote').textContent = kept ? 'Scans and labels are kept on this phone until you clear them.' : 'This browser can’t keep scans, so they stay only until you close the app.';
+  if(kept && navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(u=>{ if(u&&u.usage!=null) $('usageNote').textContent=`Scans and labels are kept on this phone until you clear them. Using ${(u.usage/1048576).toFixed(0)} MB.`; }).catch(()=>{});
+  $('setSheet').hidden=false; document.body.style.overflow='hidden';
+}
+function closeSettings(){ $('setSheet').hidden=true; document.body.style.overflow=''; render(); }
+$('settingsBtn').onclick=openSettings; $('setDone').onclick=closeSettings;
+const setS=(k,v)=>{ S[k]=v; persistSettings(); render(); };
+$('albumIn').addEventListener('input',e=>setS('album',e.target.value));
+$('backsIn').addEventListener('change',e=>setS('backs',e.target.checked));
+$('sizeIn').addEventListener('change',e=>setS('size',+e.target.value));
+$('restoreIn').addEventListener('change',e=>setS('restore',e.target.checked));
+$('fmtIn').addEventListener('change',e=>setS('fmt',e.target.value));
+$('aiRotIn').addEventListener('change',e=>setS('aiRot',e.target.checked));
+$('aiBackIn').addEventListener('change',e=>setS('aiBack',e.target.checked));
+document.querySelectorAll('#shotsSeg button').forEach(b=>b.onclick=()=>{ setS('shots',+b.dataset.v); document.querySelectorAll('#shotsSeg button').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); });
+$('clearBtn').onclick=()=>{ $('clearN').textContent=real().filter(i=>i.saved).length; $('clearConfirm').hidden=false; };
+$('clearNo').onclick=()=>{ $('clearConfirm').hidden=true; };
+$('clearYes').onclick=()=>{ const s=real().filter(i=>i.saved); s.forEach(forget); $('clearConfirm').hidden=true; $('clearBtn').disabled=true; toast(`Removed ${s.length} saved scan${s.length>1?'s':''}.`); render(); };
+
+/* ---------- example print: two glare shots and a handwritten back ---------- */
+function drawScene(x,L,T,W,H){
+  const sky=x.createLinearGradient(0,T,0,T+H); sky.addColorStop(0,'#c9b48c'); sky.addColorStop(1,'#e2d3b0'); x.fillStyle=sky; x.fillRect(L,T,W,H);
+  x.fillStyle='#8e7552'; x.beginPath(); x.moveTo(L,T+520); x.quadraticCurveTo(L+300,T+430,L+620,T+500); x.quadraticCurveTo(L+900,T+560,L+W,T+470); x.lineTo(L+W,T+H); x.lineTo(L,T+H); x.fill();
+  x.fillStyle='#6f5a3e'; x.fillRect(L+170,T+300,300,230); x.beginPath(); x.moveTo(L+150,T+305); x.lineTo(L+320,T+190); x.lineTo(L+490,T+305); x.fill();
+  x.fillStyle='#3f3324'; x.fillRect(L+290,T+410,60,120); x.fillStyle='#d8c9a6'; x.fillRect(L+205,T+350,55,45); x.fillRect(L+385,T+350,55,45);
+  const fig=(c0,h)=>{x.fillStyle='#3a2f22'; x.beginPath(); x.arc(c0,T+600-h,h*.12,0,Math.PI*2); x.fill(); x.fillRect(c0-h*.13,T+600-h*.88,h*.26,h*.55); x.fillRect(c0-h*.1,T+600-h*.35,h*.08,h*.35); x.fillRect(c0+h*.02,T+600-h*.35,h*.08,h*.35);};
+  fig(L+720,230); fig(L+820,190); fig(L+900,120); x.fillStyle='rgba(120,90,50,.12)'; x.fillRect(L,T,W,H);
+}
+function makeShotImage(angle, dx, glare, back){ return new Promise(res=>{
+  const c=document.createElement('canvas'); c.width=2000; c.height=1500; const x=c.getContext('2d');
+  x.fillStyle='#1d1f1e'; x.fillRect(0,0,2000,1500);
+  for(let i=0;i<7000;i++){ x.fillStyle=`rgba(255,255,255,${Math.random()*.035})`; x.fillRect(Math.random()*2000,Math.random()*1500,3,3); }
+  x.save(); x.translate(1000+dx,750); x.rotate(angle);
+  x.shadowColor='rgba(0,0,0,.6)'; x.shadowBlur=30; x.fillStyle=back?'#ece6d6':'#f1ebdc'; x.fillRect(-640,-440,1280,880); x.shadowBlur=0;
+  if(back){ x.fillStyle='#2b3550'; x.font='italic 84px "Snell Roundhand", "Segoe Script", cursive'; x.fillText('Easter 1962',-470,-120); x.fillText('Aunt Ruth & Joe',-470,10); x.fillText('at the farm',-470,140);
+    x.font='28px ui-monospace, monospace'; x.fillStyle='#8a8478'; x.fillText('KODAK PAPER   APR 62',-560,380); }
+  else { drawScene(x,-590,-390,1180,780);
+    if(glare){ const g=x.createRadialGradient(glare[0],glare[1],0,glare[0],glare[1],240); g.addColorStop(0,'rgba(255,255,255,.95)'); g.addColorStop(.5,'rgba(255,255,255,.55)'); g.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=g; x.fillRect(-590,-390,1180,780); } }
+  x.restore(); c.toBlob(b=>{ c.width=1; res(new File([b],'sample.jpg',{type:'image/jpeg'})); },'image/jpeg',.92);
+}); }
+async function loadExample(){
+  if(items.length) return;
+  const [a,b,bk]=await Promise.all([makeShotImage(-.06,0,[-150,-80],false), makeShotImage(-.03,30,[260,140],false), makeShotImage(.04,0,null,true)]);
+  if(items.length) return;
+  const s1=await makeShot(a), s2=await makeShot(b), s3=await makeShot(bk); [s1,s2,s3].forEach(m=>m.small.canvas.width=1);
+  const it={id:'example', n:0, example:true, front:[s1.shot,s2.shot], back:s3.shot, rot:0, backRot:0, who:'', when:'1962', note:'Example print', backText:'', thumb:'', saved:false, sel:false};
+  if(items.length) return;
+  items.push(it); await refreshThumb(it); render();
+}
+
+/* ---------- start ---------- */
+async function boot(){
+  render();
+  try{
+    await IDB.open();
+    const meta=await IDB.get('meta','settings'); if(meta) Object.assign(S, meta);
+    const recs=await IDB.all('scans'), loaded=[];
+    for(const [id,v] of recs){
+      if(!v || v.kind!=='scan' || !Array.isArray(v.front) || !v.front.length) continue;
+      const shot=async d=>{ const b=await IDB.get('blobs', d.asset); if(!b) throw 0; return {asset:d.asset, url:URL.createObjectURL(b), w:d.w, h:d.h, quad:unflatQ(d.quad)}; };
+      try{
+        const front=[]; for(const d of v.front) front.push(await shot(d));
+        const back=v.back?await shot(v.back):null;
+        loaded.push({id, n:v.n||0, created:v.created||'', front, back, rot:v.rot||0, backRot:v.backRot||0,
+          who:v.who||'', when:v.when||'', note:v.note||'', backText:v.backText||'', saved:!!v.saved, thumb:v.thumb||'', sel:false});
+      }catch(_){ /* a scan whose photo is gone is skipped */ }
+    }
+    loaded.sort((a,b)=>a.n-b.n);
+    items=[...loaded, ...items.filter(i=>!i.example)];
+    kept=true;
+    if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+  }catch(e){ kept=false; }
+  $('storeNote').hidden=kept;
+  $('storeNote').textContent='This browser can’t keep scans, so they stay only until you close the app. Save them to Photos before you leave.';
+  render();
+  for(const it of items) if(!it.thumb){ await refreshThumb(it); persist(it); render(); }
+  if(!items.length) loadExample();
+}
+if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+boot();
+
+</script>
+</body>
+</html>
